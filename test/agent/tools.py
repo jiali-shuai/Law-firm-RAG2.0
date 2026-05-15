@@ -18,9 +18,9 @@ def search_knowledge_base(
     当你需要查找相关案例、法律条文、司法解释等信息时调用此工具。
     参数说明：
     - search_query: 检索查询字符串，应包含关键法律要素
-    - dense_top_k: 语义检索返回数量（默认18）
-    - sparse_top_k: 关键词检索返回数量（默认18）
-    - alpha: 混合权重，越大越偏语义（默认0.5）
+    - dense_top_k: 语义检索返回数量
+    - sparse_top_k: 关键词检索返回数量
+    - alpha: 混合权重，越大越偏语义
     - collection_name: 知识库名称（minshi/xingshi/xingzheng）
     返回：JSON格式的相关文档列表，包含id和text字段
     """

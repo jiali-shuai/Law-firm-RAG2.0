@@ -18,8 +18,8 @@ def _get_bge_model():
     if _bge_model is None:
         _bge_model = BGEM3FlagModel(
             model_name_or_path=BGE_MODEL_PATH,
-            use_fp16=False,
-            device="cpu"
+            use_fp16=True,
+            device="cuda"
         )
     return _bge_model
 
