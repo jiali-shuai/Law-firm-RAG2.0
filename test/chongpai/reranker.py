@@ -6,8 +6,8 @@ setup_env()
 
 reranker = FlagReranker(
     RERANKER_MODEL_PATH,
-    use_fp16=True,
-    device="cuda"
+    use_fp16=False,
+    device="cpu"
 )
 
 """使用BGE Reranker进行重排序"""

@@ -7,8 +7,8 @@ setup_env()
 
 model = BGEM3FlagModel(
     model_name_or_path=BGE_MODEL_PATH,
-    use_fp16=True,
-    device="cuda"
+    use_fp16=False,
+    device="cpu"
 )
 
 """创建BGE-M3两种向量（稀疏+密集）"""

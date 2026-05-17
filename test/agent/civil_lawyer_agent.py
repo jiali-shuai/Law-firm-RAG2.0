@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import AIMessage, HumanMessageChunk
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain.agents import create_agent
 
 from agent.tools import search_knowledge_base, rerank_documents

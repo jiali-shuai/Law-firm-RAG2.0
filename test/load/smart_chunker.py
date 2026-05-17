@@ -2,6 +2,7 @@
 
 from langchain_core.documents import Document
 from FlagEmbedding import BGEM3FlagModel
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import json
 
@@ -18,12 +19,12 @@ def _get_bge_model():
     if _bge_model is None:
         _bge_model = BGEM3FlagModel(
             model_name_or_path=BGE_MODEL_PATH,
-            use_fp16=True,
-            device="cuda"
+            use_fp16=False,
+            device="cpu"
         )
     return _bge_model
 
-
+"""计算余弦相似度"""
 def _compute_cosine_similarity(vec1, vec2):
     dot = np.dot(vec1, vec2)
     norm1 = np.linalg.norm(vec1)
@@ -32,7 +33,7 @@ def _compute_cosine_similarity(vec1, vec2):
         return 0.0
     return float(dot / (norm1 * norm2))
 
-
+"""计算段落相似度"""
 def _compute_paragraph_similarities(paragraphs):
     if len(paragraphs) <= 1:
         return [], None
@@ -53,7 +54,7 @@ def _compute_paragraph_similarities(paragraphs):
 
     return similarities, dense_vecs
 
-
+"""动态百分位法"""
 def _dynamic_percentile_thresholds(similarities, lower_percentile=25, upper_percentile=75):
     if not similarities:
         return 0.0, 0.0
@@ -62,7 +63,7 @@ def _dynamic_percentile_thresholds(similarities, lower_percentile=25, upper_perc
     upper = np.percentile(similarities, upper_percentile)
     return float(lower), float(upper)
 
-
+"""分类边界"""
 def _classify_boundaries(similarities, lower_threshold, upper_threshold):
     boundaries = []
     for i, sim in enumerate(similarities):
@@ -85,7 +86,7 @@ def _parse_json(text: str):
         raise ValueError("LLM 返回空内容")
     return json.loads(text)
 
-
+"""LLM解决灰色地带"""
 def _llm_resolve_gray_zones(paragraphs, gray_boundaries, chat_llm):
     prompt = load_prompt("gray_zone_chunker.txt")
 
@@ -94,9 +95,11 @@ def _llm_resolve_gray_zones(paragraphs, gray_boundaries, chat_llm):
 
     pure_grays = [(t, i, s) for t, i, s in gray_boundaries if t == 'gray']
 
+    batches = []
     for batch_start in range(0, len(pure_grays), batch_size):
-        batch = pure_grays[batch_start:batch_start + batch_size]
+        batches.append(pure_grays[batch_start:batch_start + batch_size])
 
+    def _process_one_batch(batch):
         parts = []
         for local_idx, (_, idx, sim) in enumerate(batch):
             para_a = paragraphs[idx]
@@ -106,22 +109,24 @@ def _llm_resolve_gray_zones(paragraphs, gray_boundaries, chat_llm):
                 f"段落A:\n{para_a}\n\n"
                 f"段落B:\n{para_b}"
             )
-
         context = "\n\n".join(parts)
-
         response = chat_llm.invoke([
             ("system", prompt),
             ("user", context)
         ])
-
         batch_decisions = _parse_json(response.content)
-        for item in batch_decisions:
-            global_idx = batch[item["idx"]][1]
-            decisions[global_idx] = item.get("should_split", False)
+        return [(batch[item["idx"]][1], item.get("should_split", False))
+                for item in batch_decisions]
+
+    with ThreadPoolExecutor(max_workers=len(batches)) as executor:
+        future_to_batch = {executor.submit(_process_one_batch, b): b for b in batches}
+        for future in as_completed(future_to_batch):
+            for global_idx, should_split in future.result():
+                decisions[global_idx] = should_split
 
     return decisions
 
-
+"""构建分块"""
 def _build_chunks(paragraphs, boundaries, llm_decisions=None):
     if llm_decisions is None:
         llm_decisions = {}
@@ -150,7 +155,7 @@ def _build_chunks(paragraphs, boundaries, llm_decisions=None):
 
     return chunks
 
-
+"""智能分块"""
 def smart_chunk_texts(texts, chat_llm=None, lower_percentile=25, upper_percentile=75):
     if len(texts) <= 1:
         return [Document(page_content=texts[0])] if texts else []
